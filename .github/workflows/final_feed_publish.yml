@@ -2,42 +2,45 @@ name: Daily Curation (Stage 2)
 
 on:
   schedule:
-    - cron: '10 3 * * *'  # Runs daily at 08:00 AM Bangladesh time
+    - cron: '10 3 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  setup:
-    uses: ./.github/workflows/setup-python.yml
-    with:
-      python-version: '3.11'
-
-  curate-final:
+  curate:
     runs-on: ubuntu-latest
-    needs: setup
-
+    
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      # 🧠 Model cache (LaBSE - optimized for Bangla)
-      - name: Cache SentenceTransformer model
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Cache SentenceTransformer Model
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/torch
             ~/.cache/huggingface
-          key: ${{ runner.os }}-sentence-transformers-LaBSE
+          key: ${{ runner.os }}-transformers-labse-v1
           restore-keys: |
-            ${{ runner.os }}-sentence-transformers-
+            ${{ runner.os }}-transformers-
 
-      - name: Install Python Dependencies
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install --no-cache-dir sentence-transformers scikit-learn numpy torch feedparser
+          pip install sentence-transformers scikit-learn numpy torch feedparser
 
-      - name: Preload and Verify Model Cache
+      - name: Preload Model
         run: |
-          python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/LaBSE'); print('✅ LaBSE model cached successfully (optimized for Bangla)')"
+          python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/LaBSE'); print('✅ Model cached')"
 
       - name: Run Daily Curation
         run: python final_feed.py
@@ -47,11 +50,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git pull --rebase origin main || true
-          touch final.xml last_seen_final.json
-          git add final.xml last_seen_final.json
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "📰 বাংলা দৈনিক সংকলন: $(date -u +"%Y-%m-%d")"
-            git push
-          fi
+          git add final.xml last_seen_final.json || true
+          git diff --staged --quiet && echo "No changes" || (git commit -m "📰 Daily curation: $(date -u +'%Y-%m-%d')" && git push)
