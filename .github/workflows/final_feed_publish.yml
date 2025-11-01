@@ -19,14 +19,14 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 🧠 Model cache
+      # 🧠 Model cache (LaBSE - optimized for Bangla)
       - name: Cache SentenceTransformer model
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/torch
             ~/.cache/huggingface
-          key: ${{ runner.os }}-sentence-transformers-all-mpnet-base-v2
+          key: ${{ runner.os }}-sentence-transformers-LaBSE
           restore-keys: |
             ${{ runner.os }}-sentence-transformers-
 
@@ -37,7 +37,7 @@ jobs:
 
       - name: Preload and Verify Model Cache
         run: |
-          python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-mpnet-base-v2'); print('✅ all-mpnet-base-v2 model cached successfully')"
+          python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/LaBSE'); print('✅ LaBSE model cached successfully (optimized for Bangla)')"
 
       - name: Run Daily Curation
         run: python final_feed.py
@@ -52,6 +52,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "📰 Daily curation: $(date -u +"%Y-%m-%d")"
+            git commit -m "📰 বাংলা দৈনিক সংকলন: $(date -u +"%Y-%m-%d")"
             git push
           fi
