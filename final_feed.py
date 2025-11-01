@@ -20,42 +20,47 @@ LAST_SEEN_FILE = "last_seen_final.json"
 # Thresholds
 MIN_FEED_COUNT = 3  # Story must appear in at least 3 feeds
 SIMILARITY_THRESHOLD = 0.50  # Title clustering threshold
-TOP_N_ARTICLES = 50  # Only keep top 20 articles
+TOP_N_ARTICLES = 50  # Only keep top 50 articles
 
 # Importance scoring weights
 WEIGHT_FEED_COUNT = 10.0
 WEIGHT_REPUTATION = 0.5
 
-# Source reputation hierarchy (higher = more reputable)
+# Source reputation hierarchy for Bangla sources (higher = more reputable)
 REPUTATION = {
-    "The Daily Star": 14,              # most reputable English daily
-    "Dhaka Tribune": 13,               # strong editorial quality
-    "The Business Standard": 12,       # modern, analytical reporting
-    "Financial Express": 11,           # older, respected business daily
-    "BDNEWS24": 10,                    # first digital-native platform
-    "New Age": 9,                      # respected editorial independence
-    "Prothom Alo (English)": 8,        # strong parent brand
-    "Daily Sun": 7,                    # mainstream, corporate-leaning
-    "Observer": 6,                     # older, smaller footprint
-    "Bangladesh Post": 5,              # mid-tier, developing credibility
-    "UNB": 4,                          # reliable wire, less analytical
-    "BSS": 3,                          # state-run official news agency
+    "প্রথম আলো": 14,              # most reputable & circulated
+    "সমকাল": 13,                   # strong editorial quality
+    "যুগান্তর": 12,                # established, reliable
+    "কালবেলা": 11,                 # respected daily
+    "বাংলা ট্রিবিউন": 10,          # digital-first quality
+    "বণিক বার্তা": 9,              # business & economy focus
+    "বাংলাদেশ প্রতিদিন": 8,        # high circulation
+    "জাগো নিউজ ২৪": 7,            # popular online
+    "বাংলা নিউজ ২৪": 6,           # established online
+    "ফাইন্যান্সিয়াল এক্সপ্রেস": 5, # business daily
 }
 
 # ===== MODEL =====
 print("🔄 Loading embedding model...")
 try:
-    model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
-    print("✅ Model loaded successfully (all-mpnet-base-v2)")
+    # Using LaBSE - best for multilingual including Bangla
+    model = SentenceTransformer("sentence-transformers/LaBSE")
+    print("✅ Model loaded successfully (LaBSE - optimized for Bangla)")
 except Exception as e:
-    print(f"❌ Failed to load model: {e}")
-    sys.exit(1)
+    print(f"⚠️ LaBSE failed, falling back to paraphrase-multilingual-mpnet-base-v2")
+    try:
+        model = SentenceTransformer("sentence-transformers/paraphrase-multilingual-mpnet-base-v2")
+        print("✅ Model loaded successfully (paraphrase-multilingual-mpnet-base-v2)")
+    except Exception as e2:
+        print(f"❌ Failed to load model: {e2}")
+        sys.exit(1)
 
 # ===== UTILITY FUNCTIONS =====
 def normalize_title(title):
-    """Normalize title for better clustering"""
+    """Normalize title for better clustering (works with Bangla text)"""
     title = re.sub(r'\s+', ' ', title).strip()
-    title = re.sub(r'[^\w\s\-\']', '', title)
+    # Keep Bangla characters, English letters, numbers, and basic punctuation
+    title = re.sub(r'[^\u0980-\u09FF\w\s\-\']', '', title)
     return title.lower()
 
 def get_reputation_score(source):
@@ -84,7 +89,7 @@ def load_articles_from_temp():
         title = item.findtext("title", "").strip()
         link = item.findtext("link", "").strip()
         pub_date_str = item.findtext("pubDate", "").strip()
-        source = item.findtext("source", "Unknown").strip()
+        source = item.findtext("source", "অজানা সূত্র").strip()
 
         if not title or not link:
             continue
@@ -100,7 +105,7 @@ def load_articles_from_temp():
             "source": source
         })
 
-    print(f"📥 Loaded {len(articles)} articles from temp.xml")
+    print(f"📥 Loaded {len(articles)} Bangla articles from temp.xml")
     return articles
 
 # ===== CLUSTERING =====
@@ -108,16 +113,16 @@ def cluster_articles(articles):
     if not articles:
         return []
 
-    print("🧠 Computing embeddings...")
+    print("🧠 Computing embeddings for Bangla titles...")
     try:
         titles = [a["normalized_title"] for a in articles]
         embeddings = model.encode(titles, show_progress_bar=False)
-        print(f"✅ Encoded {len(titles)} titles")
+        print(f"✅ Encoded {len(titles)} Bangla titles")
     except Exception as e:
         print(f"❌ Encoding failed: {e}")
         return [[a] for a in articles]
 
-    print("🔗 Clustering articles...")
+    print("🔗 Clustering Bangla articles...")
     clusters = []
     used = set()
 
@@ -146,12 +151,12 @@ def calculate_importance(cluster):
     unique_sources = len(set(a["source"] for a in cluster))
     reputations = [get_reputation_score(a["source"]) for a in cluster]
     avg_reputation = sum(reputations) / len(reputations) if reputations else 0
-    
+
     score = (
         unique_sources * WEIGHT_FEED_COUNT +
         avg_reputation * WEIGHT_REPUTATION
     )
-    
+
     return {
         "score": score,
         "feed_count": unique_sources,
@@ -169,15 +174,15 @@ def select_best_article(cluster):
 # ===== DEDUPLICATION =====
 def load_last_seen():
     if os.path.exists(LAST_SEEN_FILE):
-        with open(LAST_SEEN_FILE, "r") as f:
+        with open(LAST_SEEN_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
             cutoff = datetime.now(timezone.utc) - timedelta(days=7)
             return {url: ts for url, ts in data.items() if datetime.fromisoformat(ts) > cutoff}
     return {}
 
 def save_last_seen(data):
-    with open(LAST_SEEN_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    with open(LAST_SEEN_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
 # ===== MAIN CURATION =====
 def curate_final_feed():
@@ -200,7 +205,7 @@ def curate_final_feed():
                 "importance": importance
             })
 
-    print(f"✨ Found {len(important_clusters)} important stories")
+    print(f"✨ Found {len(important_clusters)} important Bangla stories")
 
     important_clusters.sort(key=lambda x: x["importance"]["score"], reverse=True)
 
@@ -217,9 +222,9 @@ def curate_final_feed():
     # Generate final.xml
     rss = ET.Element("rss", version="2.0")
     channel = ET.SubElement(rss, "channel")
-    ET.SubElement(channel, "title").text = "Fahim Final News Feed"
+    ET.SubElement(channel, "title").text = "ফাহিম চূড়ান্ত সংবাদ ফিড"
     ET.SubElement(channel, "link").text = "https://evilgodfahim.github.io/"
-    ET.SubElement(channel, "description").text = "Curated important news from multiple sources"
+    ET.SubElement(channel, "description").text = "একাধিক সূত্র থেকে গুরুত্বপূর্ণ বাংলা সংবাদ"
     ET.SubElement(channel, "lastBuildDate").text = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
 
     for item in final_articles:
@@ -229,9 +234,9 @@ def curate_final_feed():
         ET.SubElement(xml_item, "title").text = article["title"]
         ET.SubElement(xml_item, "link").text = article["link"]
         ET.SubElement(xml_item, "pubDate").text = article["pubDateStr"]
-        source_text = f"{article['source']} (+{item['cluster_size']-1} other sources)" if item['cluster_size'] > 1 else article["source"]
+        source_text = f"{article['source']} (+{item['cluster_size']-1} টি অন্যান্য সূত্র)" if item['cluster_size'] > 1 else article["source"]
         ET.SubElement(xml_item, "source").text = source_text
-        desc = f"Importance: {imp['score']:.1f} | Covered by {imp['feed_count']} feeds | Reputation: {imp['avg_reputation']:.1f}"
+        desc = f"গুরুত্ব: {imp['score']:.1f} | {imp['feed_count']} টি ফিডে প্রকাশিত | সুনাম: {imp['avg_reputation']:.1f}"
         ET.SubElement(xml_item, "description").text = desc
 
     tree = ET.ElementTree(rss)
@@ -239,7 +244,7 @@ def curate_final_feed():
     tree.write(FINAL_XML_FILE, encoding="utf-8", xml_declaration=True)
     save_last_seen(new_last_seen)
 
-    print(f"\n✅ Final feed generated: {FINAL_XML_FILE}")
+    print(f"\n✅ Final Bangla feed generated: {FINAL_XML_FILE}")
     print(f"📝 Total stories: {len(final_articles)}")
 
 if __name__ == "__main__":
