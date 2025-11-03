@@ -10,7 +10,7 @@ FEEDS_FILE = "feeds.txt"
 OUTPUT_FILE = "temp.xml"
 LAST_SEEN_FILE = "last_seen_temp.json"
 MAX_ARTICLE_AGE_HOURS = 24  # Keep only articles from last 24 hours
-MAX_ITEMS = 2500  # Maximum number of articles in temp.xml
+MAX_ITEMS = 5000  # Maximum number of articles in temp.xml
 
 # Set UTF-8 encoding for output
 if sys.stdout.encoding != 'utf-8':
