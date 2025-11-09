@@ -9,21 +9,25 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 from urllib.parse import urlparse
 
-# UTF-8 stdout
+# Set UTF-8 encoding for output
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 
+# ===== CONFIG =====
 TEMP_XML_FILE = "temp.xml"
 FINAL_XML_FILE = "final.xml"
 LAST_SEEN_FILE = "last_seen_final.json"
 
+# Thresholds
 MIN_FEED_COUNT = 1
-SIMILARITY_THRESHOLD = 0.68
+SIMILARITY_THRESHOLD = 0.65
 TOP_N_ARTICLES = 100
 
+# Importance scoring weights
 WEIGHT_FEED_COUNT = 10.0
 WEIGHT_REPUTATION = 0.5
 
+# Source reputation hierarchy
 REPUTATION = {
     "প্রথম আলো": 5,
     "সমকাল": 4,
@@ -37,15 +41,21 @@ REPUTATION = {
     "ফাইন্যান্সিয়াল এক্সপ্রেস": 9,
 }
 
+# ===== MODEL =====
 print("🔄 Loading embedding model...")
 try:
     model = SentenceTransformer("sentence-transformers/LaBSE")
     print("✅ Model loaded successfully (LaBSE)")
-except:
-    print("⚠️ LaBSE failed, falling back to paraphrase-multilingual-mpnet-base-v2")
-    model = SentenceTransformer("sentence-transformers/paraphrase-multilingual-mpnet-base-v2")
-    print("✅ Loaded fallback model")
+except Exception as e:
+    print(f"⚠️ LaBSE failed, falling back to paraphrase-multilingual-mpnet-base-v2")
+    try:
+        model = SentenceTransformer("sentence-transformers/paraphrase-multilingual-mpnet-base-v2")
+        print("✅ Model loaded successfully (paraphrase-multilingual-mpnet-base-v2)")
+    except Exception as e2:
+        print(f"❌ Failed to load model: {e2}")
+        sys.exit(1)
 
+# ===== UTILITY FUNCTIONS =====
 def normalize_title(title):
     title = re.sub(r'\s+', ' ', title).strip()
     title = re.sub(r'[^\u0980-\u09FF\w\s\-\']', '', title)
@@ -55,19 +65,13 @@ def get_reputation_score(source):
     return REPUTATION.get(source, 1)
 
 def parse_xml_date(date_str):
-    if not date_str:
-        return datetime.now(timezone.utc)
-    for fmt in [
-        "%a, %d %b %Y %H:%M:%S %Z",
-        "%a, %d %b %Y %H:%M:%S GMT",
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%d"
-    ]:
+    try:
+        return datetime.strptime(date_str, "%a, %d %b %Y %H:%M:%S %Z")
+    except:
         try:
-            return datetime.strptime(date_str, fmt)
+            return datetime.strptime(date_str, "%a, %d %b %Y %H:%M:%S GMT")
         except:
-            continue
-    return datetime.now(timezone.utc)
+            return datetime.now(timezone.utc)
 
 def safe_str(val):
     try:
@@ -77,7 +81,7 @@ def safe_str(val):
 
 def valid_economy_link(link):
     """
-    Accept if 'economy' or 'economics' appears anywhere meaningful in the URL.
+    Accept if 'economy' or 'economics' or 'business' appears anywhere meaningful in the URL.
     Robust to missing scheme or different URL formats.
     """
     if not link:
@@ -92,8 +96,8 @@ def valid_economy_link(link):
             parsed = urlparse("http://" + l)
         # Combine parts where keywords might appear
         combined = " ".join(filter(None, [parsed.netloc, parsed.path, parsed.params, parsed.query, parsed.fragment]))
-        # Look for whole-word matches for economy or economics
-        return bool(re.search(r'\b(economy|economics)\b', combined))
+        # Look for whole-word matches for economy, economics or business
+        return bool(re.search(r'\b(economy|economics|business)\b', combined))
     except:
         return False
 
@@ -134,41 +138,44 @@ def load_articles_from_temp():
             "source": source
         })
 
-    print(f"📥 Loaded {len(articles)} economy/economics articles")
+    print(f"📥 Loaded {len(articles)} economy/economics/business articles")
     return articles
 
 def cluster_articles(articles):
     if not articles:
         return []
 
+    print("🧠 Computing embeddings for Bangla titles...")
     try:
         titles = [a["normalized_title"] for a in articles]
         embeddings = model.encode(titles, show_progress_bar=False)
-    except:
+        print(f"✅ Encoded {len(titles)} Bangla titles")
+    except Exception as e:
+        print(f"❌ Encoding failed: {e}")
         return [[a] for a in articles]
 
+    print("🔗 Clustering Bangla articles...")
     clusters = []
     used = set()
 
     for i, emb_i in enumerate(embeddings):
         if i in used:
             continue
+
         cluster = [articles[i]]
         used.add(i)
 
         for j in range(i + 1, len(embeddings)):
             if j in used:
                 continue
-            try:
-                sim = cosine_similarity([emb_i], [embeddings[j]])[0][0]
-            except:
-                sim = 0
-            if sim >= SIMILARITY_THRESHOLD:
+            similarity = cosine_similarity([emb_i], [embeddings[j]])[0][0]
+            if similarity >= SIMILARITY_THRESHOLD:
                 cluster.append(articles[j])
                 used.add(j)
 
         clusters.append(cluster)
 
+    print(f"📊 Created {len(clusters)} clusters from {len(articles)} articles")
     return clusters
 
 def calculate_importance(cluster):
@@ -176,35 +183,31 @@ def calculate_importance(cluster):
     reputations = [get_reputation_score(a["source"]) for a in cluster]
     avg_reputation = sum(reputations) / len(reputations) if reputations else 0
 
+    score = (
+        unique_sources * WEIGHT_FEED_COUNT +
+        avg_reputation * WEIGHT_REPUTATION
+    )
+
     return {
-        "score": unique_sources * WEIGHT_FEED_COUNT + avg_reputation * WEIGHT_REPUTATION,
+        "score": score,
         "feed_count": unique_sources,
         "avg_reputation": avg_reputation
     }
 
 def select_best_article(cluster):
-    return sorted(
+    sorted_cluster = sorted(
         cluster,
         key=lambda a: (get_reputation_score(a["source"]), a["pubDate"]),
         reverse=True
-    )[0]
+    )
+    return sorted_cluster[0]
 
 def load_last_seen():
     if os.path.exists(LAST_SEEN_FILE):
-        try:
-            with open(LAST_SEEN_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except:
-            return {}
-        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-        out = {}
-        for url, ts in data.items():
-            try:
-                if datetime.fromisoformat(ts) > cutoff:
-                    out[url] = ts
-            except:
-                continue
-        return out
+        with open(LAST_SEEN_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+            return {url: ts for url, ts in data.items() if datetime.fromisoformat(ts) > cutoff}
     return {}
 
 def save_last_seen(data):
@@ -214,7 +217,7 @@ def save_last_seen(data):
 def curate_final_feed():
     articles = load_articles_from_temp()
     if not articles:
-        print("⚠️ No economy/economics articles to process")
+        print("⚠️  No economy articles to process")
         return
 
     clusters = cluster_articles(articles)
@@ -222,12 +225,12 @@ def curate_final_feed():
 
     for cluster in clusters:
         if len(set(a["source"] for a in cluster)) >= MIN_FEED_COUNT:
-            imp = calculate_importance(cluster)
+            importance = calculate_importance(cluster)
             best_article = select_best_article(cluster)
             important_clusters.append({
                 "article": best_article,
                 "cluster_size": len(cluster),
-                "importance": imp,
+                "importance": importance,
                 "cluster": cluster
             })
 
@@ -238,10 +241,10 @@ def curate_final_feed():
     final_articles = []
 
     for item in important_clusters[:TOP_N_ARTICLES]:
-        art = item["article"]
-        if art["link"] not in last_seen:
+        article = item["article"]
+        if article["link"] not in last_seen:
             final_articles.append(item)
-            new_last_seen[art["link"]] = datetime.now(timezone.utc).isoformat()
+            new_last_seen[article["link"]] = datetime.now(timezone.utc).isoformat()
 
     rss = ET.Element("rss", version="2.0")
     channel = ET.SubElement(rss, "channel")
@@ -262,7 +265,7 @@ def curate_final_feed():
         ET.SubElement(xml_item, "title").text = art["title"]
         ET.SubElement(xml_item, "link").text = art["link"]
         ET.SubElement(xml_item, "pubDate").text = art["pubDateStr"]
-        source_text = f"{art['source']} (+{item['cluster_size']-1} অন্যান্য)" if item['cluster_size'] > 1 else art['source']
+        source_text = f"{art['source']} (+{item['cluster_size']-1} অন্যান্য)"
         ET.SubElement(xml_item, "source").text = source_text
 
         cluster = item["cluster"]
