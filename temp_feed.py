@@ -76,14 +76,24 @@ def safe_str(val):
         return ""
 
 def valid_economy_link(link):
+    """
+    Accept if 'economy' or 'economics' appears anywhere meaningful in the URL.
+    Robust to missing scheme or different URL formats.
+    """
     if not link:
         return False
     try:
-        link = link.lower()
-        parsed = urlparse(link)
-        if not parsed.scheme or not parsed.netloc:
-            return False
-        return "economy" in link
+        l = link.strip().lower()
+        # Remove surrounding angle brackets (sometimes present in feeds)
+        l = l.strip("<>\"'")
+        parsed = urlparse(l)
+        # If scheme/netloc missing, try prepending http:// and reparse
+        if not parsed.scheme and not parsed.netloc:
+            parsed = urlparse("http://" + l)
+        # Combine parts where keywords might appear
+        combined = " ".join(filter(None, [parsed.netloc, parsed.path, parsed.params, parsed.query, parsed.fragment]))
+        # Look for whole-word matches for economy or economics
+        return bool(re.search(r'\b(economy|economics)\b', combined))
     except:
         return False
 
@@ -124,7 +134,7 @@ def load_articles_from_temp():
             "source": source
         })
 
-    print(f"📥 Loaded {len(articles)} economy-only articles")
+    print(f"📥 Loaded {len(articles)} economy/economics articles")
     return articles
 
 def cluster_articles(articles):
@@ -204,7 +214,7 @@ def save_last_seen(data):
 def curate_final_feed():
     articles = load_articles_from_temp()
     if not articles:
-        print("⚠️ No economy articles to process")
+        print("⚠️ No economy/economics articles to process")
         return
 
     clusters = cluster_articles(articles)
@@ -252,7 +262,7 @@ def curate_final_feed():
         ET.SubElement(xml_item, "title").text = art["title"]
         ET.SubElement(xml_item, "link").text = art["link"]
         ET.SubElement(xml_item, "pubDate").text = art["pubDateStr"]
-        source_text = f"{art['source']} (+{item['cluster_size']-1} অন্যান্য)"
+        source_text = f"{art['source']} (+{item['cluster_size']-1} অন্যান্য)" if item['cluster_size'] > 1 else art['source']
         ET.SubElement(xml_item, "source").text = source_text
 
         cluster = item["cluster"]
