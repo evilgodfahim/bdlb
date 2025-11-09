@@ -18,7 +18,7 @@ FINAL_XML_FILE = "final.xml"
 LAST_SEEN_FILE = "last_seen_final.json"
 
 # Thresholds
-MIN_FEED_COUNT = 3
+MIN_FEED_COUNT = 1
 SIMILARITY_THRESHOLD = 0.68
 TOP_N_ARTICLES = 100
 
