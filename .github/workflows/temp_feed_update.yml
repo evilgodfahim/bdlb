@@ -2,7 +2,7 @@ name: Hourly Collection (Stage 1)
 
 on:
   schedule:
-    - cron: '45 * * * *'
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 permissions:
