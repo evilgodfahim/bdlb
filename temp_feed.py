@@ -16,6 +16,38 @@ MAX_ITEMS = 5000  # Maximum number of articles in temp.xml
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 
+
+# ===== AMARDESH DUPLICATION FIX =====
+def fix_amardesh_link(link):
+    """Fix duplicated path segments in Amar Desh URLs."""
+    if "dailyamardesh.com" not in link:
+        return link
+
+    try:
+        parts = link.split("/")
+        # Example:
+        # ['https:', '', 'www.dailyamardesh.com', 'world', 'amd10dlzgnfhs', 'world', 'amd10dlzgnfhs']
+        cleaned = []
+        skip_next = False
+
+        for i in range(len(parts)):
+            if skip_next:
+                skip_next = False
+                continue
+
+            segment = parts[i]
+            if i + 1 < len(parts) and parts[i + 1] == segment:
+                cleaned.append(segment)
+                skip_next = True
+            else:
+                cleaned.append(segment)
+
+        fixed = "/".join(cleaned)
+        return fixed
+    except:
+        return link
+
+
 # ===== SOURCE DETECTION (BANGLA) =====
 def get_source(entry):
     """Identify Bangla news source from URL"""
@@ -33,10 +65,11 @@ def get_source(entry):
         "bonikbarta": "বণিক বার্তা",
         "financialexpress": "ফাইন্যান্সিয়াল এক্সপ্রেস",
     }
-    for key, name in source_map.items():
+    for key, name in source_map.items:
         if key in url:
             return name
     return "অজানা সূত্র"
+
 
 # ===== DATE PARSING =====
 def parse_date(entry):
@@ -53,6 +86,7 @@ def is_recent(pub_date):
     now = datetime.now(timezone.utc)
     age = now - pub_date
     return age < timedelta(hours=MAX_ARTICLE_AGE_HOURS)
+
 
 # ===== LAST SEEN MANAGEMENT =====
 def load_last_seen():
@@ -78,6 +112,7 @@ def save_last_seen(data):
     """Save URL tracking"""
     with open(LAST_SEEN_FILE, "w") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
 
 # ===== XML MANAGEMENT =====
 def load_existing_xml():
@@ -131,6 +166,7 @@ def enforce_max_items(root):
         channel.remove(item)
     return len(items) - MAX_ITEMS
 
+
 # ===== MAIN COLLECTION LOGIC =====
 def collect_articles():
     """Main function: collect new articles from all feeds"""
@@ -159,6 +195,9 @@ def collect_articles():
             for entry in feed.entries:
                 title = entry.get("title", "").strip()
                 link = entry.get("link", "").strip()
+
+                # ===== APPLY AMARDESH FIX HERE =====
+                link = fix_amardesh_link(link)
 
                 if not title or not link:
                     continue
