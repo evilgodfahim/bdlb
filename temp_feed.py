@@ -25,25 +25,19 @@ def fix_amardesh_link(link):
 
     try:
         parts = link.split("/")
-        # Example:
-        # ['https:', '', 'www.dailyamardesh.com', 'world', 'amd10dlzgnfhs', 'world', 'amd10dlzgnfhs']
         cleaned = []
         skip_next = False
-
         for i in range(len(parts)):
             if skip_next:
                 skip_next = False
                 continue
-
             segment = parts[i]
             if i + 1 < len(parts) and parts[i + 1] == segment:
                 cleaned.append(segment)
                 skip_next = True
             else:
                 cleaned.append(segment)
-
-        fixed = "/".join(cleaned)
-        return fixed
+        return "/".join(cleaned)
     except:
         return link
 
@@ -65,7 +59,7 @@ def get_source(entry):
         "bonikbarta": "বণিক বার্তা",
         "financialexpress": "ফাইন্যান্সিয়াল এক্সপ্রেস",
     }
-    for key, name in source_map.items:
+    for key, name in source_map.items():
         if key in url:
             return name
     return "অজানা সূত্র"
@@ -74,12 +68,11 @@ def get_source(entry):
 # ===== DATE PARSING =====
 def parse_date(entry):
     """Parse publication date from feed entry"""
-    if "published_parsed" in entry and entry.published_parsed:
-        try:
-            return datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
-        except:
-            pass
+    dt_struct = entry.get("published_parsed") or entry.get("updated_parsed")
+    if dt_struct:
+        return datetime(*dt_struct[:6], tzinfo=timezone.utc)
     return datetime.now(timezone.utc)
+
 
 def is_recent(pub_date):
     """Check if article is within the 24-hour window"""
@@ -92,7 +85,7 @@ def is_recent(pub_date):
 def load_last_seen():
     """Load URL tracking to prevent duplicates within 24 hours"""
     if os.path.exists(LAST_SEEN_FILE):
-        with open(LAST_SEEN_FILE, "r") as f:
+        with open(LAST_SEEN_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
             cutoff = datetime.now(timezone.utc) - timedelta(hours=MAX_ARTICLE_AGE_HOURS)
             cleaned = {}
@@ -108,9 +101,10 @@ def load_last_seen():
             return cleaned
     return {}
 
+
 def save_last_seen(data):
     """Save URL tracking"""
-    with open(LAST_SEEN_FILE, "w") as f:
+    with open(LAST_SEEN_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
@@ -129,11 +123,12 @@ def load_existing_xml():
         ET.SubElement(channel, "description").text = "২৪ ঘণ্টার বাংলা সংবাদ"
         return ET.ElementTree(root), root
 
+
 def clean_old_articles(root):
     """Remove articles older than 24 hours from XML"""
     channel = root.find("channel")
     if channel is None:
-        return
+        return 0
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=MAX_ARTICLE_AGE_HOURS)
     items_to_remove = []
@@ -153,6 +148,7 @@ def clean_old_articles(root):
 
     return len(items_to_remove)
 
+
 def enforce_max_items(root):
     """Keep only the newest MAX_ITEMS articles"""
     channel = root.find("channel")
@@ -170,7 +166,6 @@ def enforce_max_items(root):
 # ===== MAIN COLLECTION LOGIC =====
 def collect_articles():
     """Main function: collect new articles from all feeds"""
-
     if not os.path.exists(FEEDS_FILE):
         print(f"❌ {FEEDS_FILE} not found")
         return
@@ -192,21 +187,27 @@ def collect_articles():
     for feed_url in feed_urls:
         try:
             feed = feedparser.parse(feed_url)
+            print(f"ℹ️  Feed {feed_url} returned {len(feed.entries)} entries")
             for entry in feed.entries:
                 title = entry.get("title", "").strip()
                 link = entry.get("link", "").strip()
 
-                # ===== APPLY AMARDESH FIX HERE =====
-                link = fix_amardesh_link(link)
-
                 if not title or not link:
                     continue
+
+                # Fix Amar Desh duplicated URLs
+                link = fix_amardesh_link(link)
+
                 if link in last_seen:
                     continue
+
                 pub_date = parse_date(entry)
                 if not is_recent(pub_date):
                     continue
+
                 source = get_source(entry)
+
+                print(f"✅ Adding article: {title} | {link}")
 
                 new_articles.append({
                     "title": title,
@@ -215,22 +216,21 @@ def collect_articles():
                     "pubDate": pub_date
                 })
                 last_seen[link] = pub_date.isoformat()
+
         except Exception as e:
             feed_errors.append(f"{feed_url}: {str(e)}")
 
-    # Add new articles at the top
+    # Add new articles at the top of the channel (after <title>, <link>, <description>)
     channel = root.find("channel")
-    first_item = channel.find("item")
+    insertion_index = 3  # after title, link, description
     for article in new_articles:
         item = ET.Element("item")
         ET.SubElement(item, "title").text = article["title"]
         ET.SubElement(item, "link").text = article["link"]
         ET.SubElement(item, "source").text = article["source"]
         ET.SubElement(item, "pubDate").text = article["pubDate"].strftime("%a, %d %b %Y %H:%M:%S GMT")
-        if first_item is not None:
-            channel.insert(list(channel).index(first_item), item)
-        else:
-            channel.append(item)
+        channel.insert(insertion_index, item)
+        insertion_index += 1
 
     trimmed = enforce_max_items(root)
     if trimmed:
@@ -255,6 +255,7 @@ def collect_articles():
             print(f"   {error}")
 
     sys.exit(0)
+
 
 if __name__ == "__main__":
     try:
