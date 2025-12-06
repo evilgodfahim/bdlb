@@ -11,12 +11,13 @@ permissions:
 jobs:
   curate:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -49,6 +50,36 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin main || true
+          
+          # Add the files first
           git add final.xml last_seen_final.json || true
-          git diff --staged --quiet && echo "No changes" || (git commit -m "📰 Daily curation: $(date -u +'%Y-%m-%d')" && git push)
+          
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          
+          # Pull latest changes with merge strategy
+          git pull origin main --no-rebase || true
+          
+          # Commit the changes
+          git commit -m "📰 Daily curation: $(date -u +'%Y-%m-%d')" || true
+          
+          # Push with retry logic
+          MAX_RETRIES=3
+          for i in $(seq 1 $MAX_RETRIES); do
+            if git push origin main; then
+              echo "✅ Successfully pushed changes"
+              exit 0
+            else
+              echo "⚠️ Push failed, attempt $i of $MAX_RETRIES"
+              if [ $i -lt $MAX_RETRIES ]; then
+                git pull origin main --no-rebase
+                sleep 2
+              fi
+            fi
+          done
+          
+          echo "❌ Failed to push after $MAX_RETRIES attempts"
+          exit 1
