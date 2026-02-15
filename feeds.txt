@@ -1,4 +1,9 @@
 https://evilgodfahim.github.io/fes/bangla.xml
+https://evilgodfahim.github.io/kal/articles.xml
+https://evilgodfahim.github.io/kk/daily_kalerkantho_part1.xml
+https://evilgodfahim.github.io/kk/daily_kalerkantho_part2.xml
+https://evilgodfahim.github.io/jnp/editorial_news.xml
+https://evilgodfahim.github.io/dnpbb/feed.xml
 https://evilgodfahim.github.io/dnpbb/feed.xml
 https://politepaul.com/fd/mcPwxnVseYwU.xml
 https://www.jagonews24.com/rss/rss.xml
