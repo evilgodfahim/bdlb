@@ -183,11 +183,29 @@ def collect_articles():
 
     new_articles = []
     feed_errors = []
+    politepaul_empty = []  # tracks politepaul feeds that returned no entries
 
     for feed_url in feed_urls:
         try:
             feed = feedparser.parse(feed_url)
-            print(f"ℹ️  Feed {feed_url} returned {len(feed.entries)} entries")
+            entries_count = len(getattr(feed, "entries", []) or feed.get("entries", []))
+            # detect politepaul feeds by presence of 'politepaul' in feed URL or feed metadata
+            feed_meta = feed.get("feed", {}) if isinstance(feed, dict) else getattr(feed, "feed", {})
+            feed_link_meta = (feed_meta.get("link") or "").lower()
+            feed_title_meta = (feed_meta.get("title") or "").lower()
+            is_politepaul = "politepaul" in feed_url.lower() or "politepaul" in feed_link_meta or "politepaul" in feed_title_meta
+
+            print(f"ℹ️  Feed {feed_url} returned {entries_count} entries")
+
+            if is_politepaul and entries_count == 0:
+                # capture friendly name (title) if available, else use URL
+                friendly_name = feed_meta.get("title") if isinstance(feed_meta, dict) else (getattr(feed, "feed", {}).get("title") if hasattr(feed, "feed") else None)
+                if not friendly_name:
+                    friendly_name = feed_url
+                politepaul_empty.append({"url": feed_url, "title": friendly_name})
+                # continue to next feed without treating as error
+                continue
+
             for entry in feed.entries:
                 title = entry.get("title", "").strip()
                 link = entry.get("link", "").strip()
@@ -248,6 +266,11 @@ def collect_articles():
     total_items = len(channel.findall("item"))
     print(f"✅ Added {len(new_articles)} new Bangla articles")
     print(f"📦 Total in temp.xml: {total_items} articles")
+
+    if politepaul_empty:
+        print(f"⚠️  PolitePaul feeds empty ({len(politepaul_empty)}):")
+        for p in politepaul_empty:
+            print(f"   - {p.get('title')} | {p.get('url')}")
 
     if feed_errors:
         print(f"⚠️  Feed errors ({len(feed_errors)}):")
