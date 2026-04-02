@@ -52,7 +52,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
           # Add the files first
-          git add final.xml last_seen_final.json || true
+          git add final.xml *txt last_seen_final.json || true
           
           # Check if there are changes to commit
           if git diff --staged --quiet; then
