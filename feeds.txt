@@ -1,6 +1,7 @@
 https://evilgodfahim.github.io/dr/articles.xml
 https://evilgodfahim.github.io/tbs/bangla.xml
 https://evilgodfahim.github.io/dstar/feeds/bangla_feed.xml
+https://evilgodfahim.github.io/skaln/feeds/feed.xml
 https://politepaul.com/fd/yemBDZAOHnqY.xml
 https://evilgodfahim.github.io/pade/output/articles.xml
 https://evilgodfahim.github.io/dt/bangla.xml
