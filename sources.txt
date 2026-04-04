@@ -1,3 +1,4 @@
+bangla
 banglatribune
 bd-pratidin
 bonikbarta
@@ -8,3 +9,4 @@ jugantor
 kalbela
 kalerkantho
 prothomalo
+tbsnews
