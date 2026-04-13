@@ -1,5 +1,6 @@
 bangla
 banglatribune
+bd-pratidin
 bonikbarta
 dailyinqilab
 dailynayadiganta
