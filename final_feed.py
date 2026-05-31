@@ -21,7 +21,7 @@ SOURCES_FILE = "sources.txt"
 
 # Thresholds
 MIN_FEED_COUNT = 1
-SIMILARITY_THRESHOLD = 0.65
+SIMILARITY_THRESHOLD = 0.85
 TOP_N_ARTICLES = 100
 
 # Importance scoring weights
