@@ -1,6 +1,8 @@
 bangla
 banglatribune
 bonikbarta
+dailyinqilab
+dailynayadiganta
 jagonews24
 jugantor
 kalbela
