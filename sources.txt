@@ -1,8 +1,9 @@
 bangla
 banglatribune
-dailyinqilab
+bonikbarta
+dailynayadiganta
 jagonews24
-jugantor
 kalbela
 prothomalo
 samakal
+tbsnews
